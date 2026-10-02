@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Агроробот</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one column of three "missions" on an agronomist's field board; field + control panel side by side, stacked on phones */
+:root{
+  --bg:#EDF2EE; --surface:#FFFFFF; --surface-2:#E1E9E3; --fg:#14231A; --muted:#55685B; --line:#C8D5CB;
+  --field:#1F6B3A; --on-field:#FFFFFF; --amber:#E0950C; --water:#2373C4; --soil:#8A6340; --soil-2:#A57C55;
+  --stone:#8B948F; --danger:#BE3B27; --ok:#2B8A4B; --ndvi-lo:#C8412B; --ndvi-mid:#E8C33A; --ndvi-hi:#2E8A45;
+  --display:"Unbounded", "Arial Black", system-ui, sans-serif;
+  --body:"Golos Text", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", Consolas, "Courier New", monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1611; --surface:#15211A; --surface-2:#1D2C23; --fg:#E3ECE5; --muted:#93A698; --line:#2B3C31;
+  --field:#5DBE7E; --on-field:#0E1611; --amber:#F2B23A; --water:#5AA7EE; --soil:#6B4E36; --soil-2:#80603F;
+  --stone:#5E6862; --danger:#EC6C57; --ok:#5DBE7E; --ndvi-lo:#D9533C; --ndvi-mid:#E2C04A; --ndvi-hi:#3FA35A;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1611; --surface:#15211A; --surface-2:#1D2C23; --fg:#E3ECE5; --muted:#93A698; --line:#2B3C31;
+  --field:#5DBE7E; --on-field:#0E1611; --amber:#F2B23A; --water:#5AA7EE; --soil:#6B4E36; --soil-2:#80603F;
+  --stone:#5E6862; --danger:#EC6C57; --ok:#5DBE7E; --ndvi-lo:#D9533C; --ndvi-mid:#E2C04A; --ndvi-hi:#3FA35A;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:0 64px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.15}
+p{margin:0}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+/* top bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1080px;margin:0 auto;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.bar nav{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+.bar nav a{color:var(--muted);text-decoration:none;font-size:14px;padding:4px 10px;border-radius:999px;border:1px solid var(--line)}
+.bar nav a:hover{color:var(--fg);border-color:var(--fg)}
+.score{font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums;background:var(--field);color:var(--on-field);padding:4px 12px;border-radius:999px;font-size:14px;white-space:nowrap}
+
+/* hero */
+.hero{padding-block:48px 32px;display:grid;gap:18px}
+.eyebrow{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.hero h1{font-size:clamp(40px,8vw,84px);font-weight:800;letter-spacing:-.02em;color:var(--field)}
+.hero h1 span{color:var(--amber)}
+.hero .lead{font-size:clamp(17px,2.2vw,20px);max-width:62ch}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-size:13px;padding:5px 12px;border-radius:999px;background:var(--surface-2);color:var(--fg)}
+
+/* missions */
+.mission{padding-block:40px;border-top:1px solid var(--line);display:grid;gap:20px;scroll-margin-top:60px}
+.m-head{display:grid;gap:8px;max-width:70ch}
+.m-tag{font-family:var(--mono);font-size:13px;color:var(--field);font-weight:600;letter-spacing:.02em}
+.m-head h2{font-size:clamp(24px,3.6vw,34px)}
+.m-head p{color:var(--muted)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:820px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:14px;min-width:0}
+.label{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* buttons */
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:9px 14px;font-weight:500;display:inline-flex;gap:8px;align-items:center;justify-content:center}
+.btn:hover:not(:disabled){border-color:var(--fg)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--field);color:var(--on-field);border-color:var(--field);font-weight:600}
+.btn.amber{background:var(--amber);color:#1A1405;border-color:var(--amber);font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* level tabs */
+.levels{display:flex;gap:6px;flex-wrap:wrap}
+.lv{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:6px 12px;font-size:14px}
+.lv[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.lv.done::after{content:" ✓";color:var(--ok);font-weight:700}
+.lv[aria-pressed="true"].done::after{color:var(--amber)}
+
+/* field */
+.field-wrap{display:grid;gap:10px;min-width:0}
+.field{position:relative;display:grid;border-radius:var(--r);overflow:hidden;border:3px solid var(--soil);background:var(--soil)}
+.cell{aspect-ratio:1;position:relative;background:
+  repeating-linear-gradient(0deg,var(--soil) 0 6px,var(--soil-2) 6px 8px);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);display:grid;place-items:center}
+.cell svg{width:72%;height:72%}
+.cell .tag{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:clamp(8px,1.4vw,11px);font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none}
+.cell.dry{background:#B98A55}
+.cell.wet{background:#4C6E86}
+.cell.hole{background:#6F4F33}
+.cell.planted{background:#5C7A3C}
+.robot{position:absolute;display:grid;place-items:center;transition:left .3s ease, top .3s ease;pointer-events:none}
+.robot svg{width:78%;height:78%;transition:transform .3s ease;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4))}
+.robot.crash svg{animation:shake .35s}
+@keyframes shake{25%{translate:-4px 0}75%{translate:4px 0}}
+.msg{padding:10px 12px;border-radius:8px;font-size:15px;background:var(--surface-2)}
+.msg.ok{background:color-mix(in srgb,var(--ok) 18%,var(--surface));color:var(--fg);border-left:4px solid var(--ok)}
+.msg.err{background:color-mix(in srgb,var(--danger) 15%,var(--surface));border-left:4px solid var(--danger)}
+
+.cmds{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.cmd{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--surface-2);color:var(--fg);font-weight:600;display:flex;gap:8px;align-items:center}
+.cmd:hover:not(:disabled){border-color:var(--field)}
+.cmd:disabled{opacity:.45;cursor:not-allowed}
+.cmd .ic{font-family:var(--mono);font-size:18px;width:22px;text-align:center;color:var(--field)}
+.prog{list-style:none;margin:0;padding:10px;background:var(--surface-2);border-radius:8px;font-family:var(--mono);font-size:14px;min-height:120px;max-height:280px;overflow:auto;counter-reset:ln}
+.prog li{counter-increment:ln;padding:2px 6px;border-radius:4px;display:flex;gap:10px}
+.prog li::before{content:counter(ln);color:var(--muted);min-width:2ch;text-align:right;font-variant-numeric:tabular-nums}
+.prog li.cur{background:var(--amber);color:#1A1405}
+.prog li.cur::before{color:#1A1405}
+.prog .empty{color:var(--muted);font-family:var(--body);counter-increment:none}
+.prog .empty::before{content:none}
+.small{font-size:14px;color:var(--muted)}
+
+/* greenhouse */
+.rule{display:grid;gap:6px;padding:12px;background:var(--surface-2);border-radius:8px}
+.rule-t{font-size:15px}
+.rule-t b{font-family:var(--mono);color:var(--field);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--field)}
+pre.code{margin:0;padding:12px 14px;background:#0F1A13;color:#D7E6DA;border-radius:8px;font-family:var(--mono);font-size:13px;line-height:1.6;overflow-x:auto}
+pre.code .k{color:#F2B23A}
+pre.code .n{color:#7FD6A0}
+pre.code .c{color:#7F9486}
+.charts{display:grid;gap:4px}
+.charts svg{width:100%;height:auto;display:block}
+.charts text{fill:var(--muted);font-family:var(--body);font-size:11px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{padding:10px 12px;background:var(--surface-2);border-radius:8px;display:grid;gap:2px}
+.stat .v{font-family:var(--display);font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .k{font-size:12px;color:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+/* drone */
+.ndvi{display:grid;gap:2px;background:var(--line);border-radius:var(--r);overflow:hidden;border:2px solid var(--line);touch-action:manipulation}
+.nc{aspect-ratio:1;border:0;padding:0;position:relative;transition:background-color .5s}
+.nc.mark::after{content:"";position:absolute;inset:18%;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.45)}
+.nc.hit::after{border-color:#fff;background:rgba(255,255,255,.25)}
+.nc.miss{outline:3px dashed #fff;outline-offset:-5px}
+.scale{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--ndvi-lo),var(--ndvi-mid),var(--ndvi-hi))}
+.scale-l{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);font-family:var(--mono)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--fg);padding:8px 14px;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+
+/* finale */
+.prof{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:820px){.prof{grid-template-columns:minmax(0,1fr)}}
+.pc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:grid;gap:10px;align-content:start}
+.pc h3{font-size:18px}
+.pc .from{font-family:var(--mono);font-size:12px;color:var(--field)}
+.pc ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:15px}
+.final{background:var(--field);color:var(--on-field);border-radius:var(--r);padding:24px;display:grid;gap:10px}
+.final .big{font-family:var(--display);font-size:clamp(28px,5vw,44px);font-weight:800}
+.final p{max-width:62ch}
+.contacts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:820px){.contacts{grid-template-columns:minmax(0,1fr)}}
+.contacts>div{display:grid;gap:3px;align-content:start;font-size:15px;min-width:0;overflow-wrap:anywhere}
+.contacts b{font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums}
+.contacts a{color:var(--field);font-weight:600}
+.hero2{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:28px}
+.hero-txt{display:grid;gap:18px;min-width:0}
+.qr-card{display:grid;justify-items:center;gap:6px;text-align:center;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);max-width:240px}
+.qr-card span{font-size:13px;color:var(--muted)}
+.qr{background:#fff;padding:10px;border-radius:8px;line-height:0}
+.qr img,.qr canvas{width:180px;height:180px;image-rendering:pixelated}
+.qr-sm{justify-self:start;margin-block:4px}
+.qr-sm img,.qr-sm canvas{width:120px;height:120px}
+@media (max-width:820px){.hero2{grid-template-columns:minmax(0,1fr)}.qr-card{justify-self:start}}
+details.host{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+details.host summary{font-weight:600;cursor:pointer}
+details.host ol{margin:10px 0 0;padding-left:20px;display:grid;gap:6px}
+.t{font-family:var(--mono);font-size:13px;color:var(--field);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="bar"><div class="bar-in">
+  <nav aria-label="Миссии">
+    <a href="#m1">1 · Агроробот</a><a href="#m2">2 · Умная теплица</a><a href="#m3">3 · Дрон</a><a href="#final">Профессии</a>
+  </nav>
+  <div class="score" id="score">0 / 100 баллов</div>
+</div></div>
+
+<main class="wrap">
+  <header class="hero hero2">
+    <div class="hero-txt">
+    <div class="eyebrow">Вавиловский университет · Институт инженерии и робототехники</div>
+    <h1>Агро<span>робот</span></h1>
+    <p class="lead">Мастер-класс кафедры «Цифровое управление процессами в АПК». Современная ферма работает на коде: роботы ездят по грядкам, датчики сами включают полив, дроны видят больные растения раньше агронома. Пройди три миссии и попробуй себя в роли программиста, робототехника и инженера.</p>
+    <div class="chips"><span class="chip">09.03.03 Прикладная информатика</span><span class="chip">Проектирование информационных систем</span><span class="chip">Агроробототехника</span><span class="chip">≈ 40 минут</span></div>
+    </div>
+    <aside class="qr-card">
+      <div class="qr" id="qrPage" role="img" aria-label="QR-код со ссылкой на мастер-класс"></div>
+      <b>Открой на телефоне</b>
+      <span>Наведи камеру на код и проходи миссии сам</span>
+    </aside>
+  </header>
+
+  <!-- Mission 1 -->
+  <section class="mission" id="m1">
+    <div class="m-head">
+      <div class="m-tag">Миссия 1 · Робототехника</div>
+      <h2>Запрограммируй агроробота</h2>
+      <p>Собери программу из команд и нажми «Запустить». Робот выполнит её шаг за шагом. Нужно полить все сухие грядки и посадить семена в лунки, не врезавшись в камни.</p>
+    </div>
+    <div class="levels" id="levels" role="group" aria-label="Уровни"></div>
+    <div class="grid2">
+      <div class="field-wrap">
+        <div class="field" id="field"></div>
+        <div class="msg" id="rmsg"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Команды</div>
+        <div class="cmds" id="cmds"></div>
+        <div class="small">Нажми «Вперёд» несколько раз подряд, и команда превратится в цикл: <code>вперёд(3)</code>.</div>
+        <div class="label">Программа</div>
+        <ol class="prog" id="prog"></ol>
+        <div class="row">
+          <button class="btn primary" id="run">▶ Запустить</button>
+          <button class="btn" id="undo">Удалить шаг</button>
+          <button class="btn" id="clear">Очистить</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Mission 2 -->
+  <section class="mission" id="m2">
+    <div class="m-head">
+      <div class="m-tag">Миссия 2 · Прикладная информатика</div>
+      <h2>Настрой умную теплицу</h2>
+      <p>В теплице стоят датчики влажности почвы, температуры и освещённости. Задай правила автоматики: при каких значениях включать полив, открывать форточки и зажигать фитолампы. Программа отработает сутки, а график покажет, как жилось огурцам.</p>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="label">Правила автоматики</div>
+        <div class="rule">
+          <label class="rule-t" for="thM">Если влажность почвы ниже <b id="vM"></b>, включить полив</label>
+          <input type="range" id="thM" min="10" max="90" step="5" value="15">
+        </div>
+        <div class="rule">
+          <label class="rule-t" for="thT">Если температура воздуха выше <b id="vT"></b>, открыть форточки</label>
+          <input type="range" id="thT" min="16" max="40" step="1" value="38">
+        </div>
+        <div class="rule">
+          <label class="rule-t" for="thL">Если днём освещённость ниже <b id="vL"></b>, включить фитолампы</label>
+          <input type="range" id="thL" min="0" max="800" step="50" value="50">
+        </div>
+        <div class="label">Так это выглядит в коде контроллера</div>
+        <pre class="code" id="code"></pre>
+      </div>
+      <div class="panel">
+        <div class="stats">
+          <div class="stat"><span class="v" id="sY">0%</span><span class="k">урожай</span></div>
+          <div class="stat"><span class="v" id="sW">0 л</span><span class="k">вода за сутки</span></div>
+          <div class="stat"><span class="v" id="sB">0%</span><span class="k">лучший результат</span></div>
+        </div>
+        <div class="msg" id="gmsg"></div>
+        <div class="charts" id="charts"></div>
+        <div class="legend"><span><i style="background:var(--field);opacity:.25;border-radius:2px"></i>комфорт для растений</span><span><i style="background:var(--amber)"></i>порог из правила</span><span><i style="background:var(--water)"></i>сработала автоматика</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Mission 3 -->
+  <section class="mission" id="m3">
+    <div class="m-head">
+      <div class="m-tag">Миссия 3 · Инженерия и данные</div>
+      <h2>Найди больные растения с дрона</h2>
+      <p>Дрон сфотографировал поле пшеницы. На обычном снимке всё зелёное. Переключись на мультиспектральную камеру: индекс NDVI показывает, насколько активно растение работает листьями. Отметь участки, где посевы болеют, и отправь опрыскиватель только туда.</p>
+    </div>
+    <div class="grid2">
+      <div class="field-wrap">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="seg" role="group" aria-label="Камера дрона">
+            <button id="camRgb" aria-pressed="true">Обычная камера</button>
+            <button id="camNdvi" aria-pressed="false">Камера NDVI</button>
+          </div>
+          <span class="small" id="markCount">Отмечено: 0</span>
+        </div>
+        <div class="ndvi" id="ndvi"></div>
+        <div id="scaleBox" hidden>
+          <div class="scale"></div>
+          <div class="scale-l"><span>0.1 болеет</span><span>0.45</span><span>0.85 здоров</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="label">Задание</div>
+        <p>Нажимай на клетки, чтобы отметить их для обработки. Каждая клетка — участок 50 × 50 м. Лишние отметки — это зря потраченные удобрения, пропуски — потерянный урожай.</p>
+        <div class="row">
+          <button class="btn amber" id="spray">Отправить опрыскиватель</button>
+          <button class="btn" id="dclear">Снять отметки</button>
+          <button class="btn" id="dnew">Новое поле</button>
+        </div>
+        <div class="msg" id="dmsg">Подсказка: на обычном снимке больные участки почти не видно.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final -->
+  <section class="mission" id="final">
+    <div class="m-head">
+      <div class="m-tag">Итог</div>
+      <h2>Кем ты был сегодня</h2>
+      <p>Каждая миссия — кусочек настоящей работы, которой учат в Институте инженерии и робототехники Вавиловского университета.</p>
+    </div>
+    <div class="final">
+      <div class="big" id="rank">Стажёр поля</div>
+      <p id="rankText">Набери баллы в миссиях, чтобы получить звание.</p>
+    </div>
+    <div class="prof">
+      <article class="pc">
+        <div class="from">Миссия 1</div>
+        <h3>Робототехник</h3>
+        <ul><li>программирует автономные машины и агророботов</li><li>учит технику объезжать препятствия</li><li>работает в Центре VR/AR и агроробототехники университета</li></ul>
+      </article>
+      <article class="pc">
+        <div class="from">Миссия 2</div>
+        <h3>Специалист по прикладной информатике</h3>
+        <ul><li>проектирует информационные системы для ферм, теплиц и предприятий</li><li>подключает датчики и контроллеры</li><li>применяет машинное зрение и искусственный интеллект</li></ul>
+      </article>
+      <article class="pc">
+        <div class="from">Миссия 3</div>
+        <h3>Инженер цифрового АПК</h3>
+        <ul><li>работает с дронами и данными дистанционного зондирования</li><li>анализирует карты полей и урожайность</li><li>экономит воду, удобрения и топливо</li></ul>
+      </article>
+    </div>
+
+    <div class="m-head" style="margin-top:12px">
+      <h2 style="font-size:clamp(20px,3vw,26px)">Это уже делают студенты кафедры</h2>
+    </div>
+    <div class="prof">
+      <article class="pc"><div class="from">Стартап · машинное зрение</div><h3>AgroWeed</h3><p>Команда сама собирает в поле снимки сорняков и обучает на них нейросеть, которая отличает сорняк от культурного растения.</p></article>
+      <article class="pc"><div class="from">Стартап · агроробототехника</div><h3>Станция для агророботов</h3><p>Студенческий проект универсальной док-станции, которая заряжает агророботов и собирает с них данные.</p></article>
+      <article class="pc"><div class="from">Аквакультура · ИИ</div><h3>Умная рыбная ферма</h3><p>Студент направления «Прикладная информатика» участвует в проекте: камера с машинным зрением определяет вес и размер рыбы в бассейне.</p></article>
+    </div>
+    <p class="small">Ещё студенты Вавиловского университета побеждали в компетенции «Комплексная цифровая агроинженерия» и участвуют в хакатонах.</p>
+
+    <div class="final" style="background:var(--surface);color:var(--fg);border:2px solid var(--field)">
+      <div class="m-tag">Поступай к нам</div>
+      <h2 style="font-size:clamp(22px,3.4vw,30px)">09.03.03 Прикладная информатика</h2>
+      <p>Профиль «Проектирование информационных систем», бакалавриат, очная и заочная форма. Дальше можно продолжить учёбу в магистратуре по тому же направлению. Кафедра «Цифровое управление процессами в АПК», Институт инженерии и робототехники.</p>
+      <div class="contacts">
+        <div><span class="label">Приёмная комиссия</span><b>8 (8452) 67-76-67</b><span>доб. 222 · консультация по прикладной информатике</span><span>pk@vavilovsar.ru</span><span>Саратов, пр-кт им. Петра Столыпина, зд. 4, стр. 3</span></div>
+        <div><span class="label">Кафедра</span><b>8 (8452) 74-96-74</b><span>digitalagriculture@vavilovsar.ru</span><span>Саратов, Театральная пл., 1, каб. 370</span></div>
+        <div><span class="label">Сайт приёмной комиссии</span><div class="qr qr-sm" id="qrAdm" role="img" aria-label="QR-код на сайт приёмной комиссии"></div><a href="https://www.vavilovsar.ru/priemnaya-komissiya" target="_blank" rel="noopener">Приёмная комиссия</a><a href="https://www.vavilovsar.ru/kafedry/cifrovoe-upravlenie-processami-v-apk" target="_blank" rel="noopener">Страница кафедры</a></div>
+      </div>
+    </div>
+    <details class="host">
+      <summary>Для ведущего: план мастер-класса на 45 минут</summary>
+      <ol>
+        <li><span class="t">0–5 мин</span> Вопрос залу: «Кто работает на современной ферме?» Показать ролик или фото агроробота, дрона, умной теплицы.</li>
+        <li><span class="t">5–18 мин</span> Миссия 1. Первый уровень проходим вместе на экране, дальше в парах. Обсудить: что такое алгоритм и цикл.</li>
+        <li><span class="t">18–28 мин</span> Миссия 2. Соревнование: кто получит урожай выше 90% и потратит меньше воды. Показать, что правило — это строчка кода.</li>
+        <li><span class="t">28–38 мин</span> Миссия 3. Сначала искать на обычном снимке, потом включить NDVI. Обсудить экономию удобрений.</li>
+        <li><span class="t">38–45 мин</span> Итог: баллы, звания, студенческие проекты кафедры (AgroWeed, станция для агророботов), направление 09.03.03, контакты приёмной комиссии. Если есть возможность, экскурсия в Центр VR/AR и агроробототехники.</li>
+      </ol>
+    </details>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function(){
+try{
+  const qr=(id,text,size)=>new QRCode(document.getElementById(id),{text,width:size,height:size,colorDark:'#0E1611',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+  if(location.protocol==='file:')document.querySelector('.qr-card').hidden=true;
+  else qr('qrPage',location.href.split('#')[0],360);
+  qr('qrAdm','https://www.vavilovsar.ru/priemnaya-komissiya',240);
+}catch(e){}
+})();
+(function(){
+const $=s=>document.getElementById(s);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const pts={robot:[false,false,false,false],green:0,drone:0};
+function updateScore(){
+  const total=pts.robot.filter(Boolean).length*10+pts.green+pts.drone;
+  $('score').textContent=total+' / 100 баллов';
+  let r='Стажёр поля',t='Ты сделал первые шаги. Попробуй пройти остальные миссии и набрать больше баллов.';
+  if(total>=40){r='Агроинженер-практикант';t='Ты уже умеешь программировать машины и работать с данными. Осталось немного до высшего звания.'}
+  if(total>=80){r='Цифровой агроном';t='Ты справился с роботом, автоматикой и анализом снимков. Именно таких специалистов готовит кафедра «Цифровое управление процессами в АПК».'}
+  if(total===0){t='Набери баллы в миссиях, чтобы получить звание.'}
+  $('rank').textContent=r+' · '+total+' баллов';$('rankText').textContent=t;
+}
+
+/* ===== Mission 1: robot ===== */
+const LEVELS=[
+  {name:'Первая грядка',hint:'Доведи робота до сухой грядки и полей её.',map:["......",">..D..","......","......"]},
+  {name:'Объезд',hint:'На пути камень. Поверни и объедь его.',map:["......",">...#.","......","....D."]},
+  {name:'Три задачи',hint:'Полей обе грядки и посади семена в лунку.',map:["D....P",".##.#.","......",".#..#.","^....D"]},
+  {name:'Лабиринт',hint:'Сложный уровень. Используй циклы, чтобы программа была короче.',map:["P.#..D","..#.#.","......","#.#.##","D...<P"]}
+];
+const DIRS={'^':0,'>':1,'v':2,'<':3}, DX=[0,1,0,-1], DY=[-1,0,1,0];
+const CMDS=[
+  {c:'F',ic:'↑',t:'Вперёд',code:'вперёд'},
+  {c:'L',ic:'↺',t:'Налево',code:'налево'},
+  {c:'R',ic:'↻',t:'Направо',code:'направо'},
+  {c:'W',ic:'≈',t:'Полить',code:'полить'},
+  {c:'P',ic:'✿',t:'Посадить',code:'посадить'}
+];
+const SVG={
+  robot:'<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="11" width="6" height="20" rx="2" fill="#1B1B1B"/><rect x="30" y="11" width="6" height="20" rx="2" fill="#1B1B1B"/><rect x="9" y="9" width="22" height="24" rx="5" fill="#F2B23A"/><path d="M20 1 L28 9 H12Z" fill="#F2B23A"/><circle cx="20" cy="20" r="5" fill="#1B1B1B"/><circle cx="20" cy="20" r="2" fill="#7FD6FF"/></svg>',
+  stone:'<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 28 Q5 17 14 12 Q22 7 30 13 Q37 19 33 28 Q20 34 7 28Z" fill="#9AA29D"/><path d="M14 14 Q20 11 26 14" stroke="#C4CBC6" stroke-width="2" fill="none"/></svg>',
+  dry:'<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M8 12 L16 18 L12 26 M16 18 L26 15 L32 22 M26 15 L28 7 M20 30 L26 24" stroke="#6E4A28" stroke-width="2" fill="none"/></svg>',
+  wet:'<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 6 Q30 20 28 26 A8 8 0 0 1 12 26 Q10 20 20 6Z" fill="#7FC4FF"/></svg>',
+  hole:'<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="22" rx="9" ry="6" fill="#3B2918"/></svg>',
+  plant:'<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 34 V16" stroke="#2F6B1E" stroke-width="3"/><path d="M20 20 Q10 18 9 9 Q18 10 20 20Z M20 17 Q28 12 32 5 Q34 14 20 17Z" fill="#8DD45A"/></svg>'
+};
+let lvl=0,prog=[],st=null,running=false,rot=0;
+function parse(L){
+  const g=[];let r=null;
+  L.map.forEach((row,y)=>{g.push([...row].map((ch,x)=>{
+    if(ch in DIRS){r={x,y,d:DIRS[ch]};return {t:'.'}}
+    return {t:ch,done:false};
+  }))});
+  return {g,r,w:L.map[0].length,h:L.map.length};
+}
+function resetLevel(){st=parse(LEVELS[lvl]);rot=st.r.d*90;renderField(true)}
+function renderLevels(){
+  $('levels').innerHTML=LEVELS.map((L,i)=>`<button class="lv${pts.robot[i]?' done':''}" aria-pressed="${i===lvl}" data-i="${i}">Уровень ${i+1}: ${L.name}</button>`).join('');
+}
+function cellHtml(c){
+  if(c.t==='#')return['','',SVG.stone];
+  if(c.t==='D')return c.done?['wet','полито',SVG.wet]:['dry','сухо',SVG.dry];
+  if(c.t==='P')return c.done?['planted','посажено',SVG.plant]:['hole','лунка',SVG.hole];
+  return['','',''];
+}
+function renderField(full){
+  const f=$('field');
+  if(full){
+    f.style.gridTemplateColumns=`repeat(${st.w},1fr)`;
+    let h='';
+    st.g.forEach((row,y)=>row.forEach((c,x)=>{h+=`<div class="cell" id="c${x}_${y}"></div>`}));
+    h+=`<div class="robot" id="robot" style="width:${100/st.w}%;height:${100/st.h}%">${SVG.robot}</div>`;
+    f.innerHTML=h;
+  }
+  st.g.forEach((row,y)=>row.forEach((c,x)=>{
+    const [cls,tag,svg]=cellHtml(c),el=$(`c${x}_${y}`);
+    el.className='cell '+cls;el.innerHTML=svg+(tag?`<span class="tag">${tag}</span>`:'');
+  }));
+  const rb=$('robot');
+  rb.style.left=(st.r.x*100/st.w)+'%';rb.style.top=(st.r.y*100/st.h)+'%';
+  rb.firstChild.style.transform=`rotate(${rot}deg)`;
+}
+function msg(id,text,kind){const m=$(id);m.textContent=text;m.className='msg'+(kind?' '+kind:'')}
+function renderProg(cur){
+  const p=$('prog');
+  if(!prog.length){p.innerHTML='<li class="empty">Пока пусто. Нажимай на команды выше.</li>';return}
+  p.innerHTML=prog.map((s,i)=>{const C=CMDS.find(c=>c.c===s.c);return `<li class="${i===cur?'cur':''}">робот.${C.code}(${s.n>1?s.n:''})</li>`}).join('');
+  const el=p.querySelector('.cur');if(el)el.scrollIntoView({block:'nearest'});
+}
+function setBusy(b){running=b;document.querySelectorAll('#cmds button,#undo,#clear,#run,#levels button').forEach(x=>x.disabled=b)}
+function addCmd(c){
+  if(running)return;
+  const last=prog[prog.length-1];
+  if(c==='F'&&last&&last.c==='F'&&last.n<9)last.n++;else prog.push({c,n:1});
+  renderProg();
+}
+function step(c){
+  const r=st.r;
+  if(c==='L'){r.d=(r.d+3)%4;rot-=90;return null}
+  if(c==='R'){r.d=(r.d+1)%4;rot+=90;return null}
+  if(c==='F'){
+    const nx=r.x+DX[r.d],ny=r.y+DY[r.d];
+    if(nx<0||ny<0||nx>=st.w||ny>=st.h)return 'Робот чуть не уехал за край поля. Проверь повороты.';
+    if(st.g[ny][nx].t==='#')return 'Робот врезался в камень! Объезжай препятствия.';
+    r.x=nx;r.y=ny;return null;
+  }
+  const cell=st.g[r.y][r.x];
+  if(c==='W'){if(cell.t==='D'){cell.done=true;return null}return 'Тут нечего поливать. Полив работает только на сухой грядке.'}
+  if(c==='P'){if(cell.t==='P'){cell.done=true;return null}return 'Тут нельзя сажать. Семена кладут только в лунку.'}
+}
+async function run(){
+  if(running)return;
+  if(!prog.length){msg('rmsg','Сначала собери программу из команд.','err');return}
+  resetLevel();setBusy(true);msg('rmsg','Робот выполняет программу…');
+  await sleep(250);
+  for(let i=0;i<prog.length;i++){
+    for(let k=0;k<prog[i].n;k++){
+      renderProg(i);
+      const err=step(prog[i].c);renderField(false);
+      await sleep(380);
+      if(err){$('robot').classList.add('crash');msg('rmsg',err,'err');setBusy(false);renderProg();return}
+    }
+  }
+  setBusy(false);renderProg();
+  const left=st.g.flat().filter(c=>(c.t==='D'||c.t==='P')&&!c.done).length;
+  if(left){msg('rmsg',`Программа закончилась, но осталось задач: ${left}. Допиши программу.`,'err');return}
+  const steps=prog.length;
+  const first=!pts.robot[lvl];pts.robot[lvl]=true;updateScore();renderLevels();
+  msg('rmsg',`Уровень пройден! Программа из ${steps} строк.${first?' +10 баллов.':''}${lvl<LEVELS.length-1?' Переходи к следующему уровню.':' Все уровни пройдены!'}`,'ok');
+}
+function selectLevel(i){lvl=i;prog=[];renderLevels();resetLevel();renderProg();msg('rmsg',LEVELS[i].hint)}
+$('cmds').innerHTML=CMDS.map(C=>`<button class="cmd" data-c="${C.c}"><span class="ic">${C.ic}</span>${C.t}</button>`).join('');
+$('cmds').addEventListener('click',e=>{const b=e.target.closest('button');if(b)addCmd(b.dataset.c)});
+$('levels').addEventListener('click',e=>{const b=e.target.closest('button');if(b&&!running)selectLevel(+b.dataset.i)});
+$('run').onclick=run;
+$('undo').onclick=()=>{if(running)return;const l=prog[prog.length-1];if(!l)return;if(l.n>1)l.n--;else prog.pop();renderProg()};
+$('clear').onclick=()=>{if(running)return;prog=[];renderProg();resetLevel();msg('rmsg',LEVELS[lvl].hint)};
+selectLevel(0);
+
+/* ===== Mission 2: greenhouse ===== */
+function simulate(th){
+  let m=55,health=100,water=0;const rows=[],why={dry:0,wet:0,hot:0,cold:0,dark:0};
+  for(let h=0;h<24;h++){
+    const sun=Math.max(0,Math.sin((h-6)/14*Math.PI));
+    const cloud=(h>=11&&h<=13)?0.35:1;
+    let lux=Math.round(sun*1000*cloud);
+    let t=15+10*sun+9*sun*cloud;
+    const acts=[];
+    if(t>th.temp){t-=8;acts.push('vent')}
+    if(h>=6&&h<=20&&lux<th.light){lux+=400;acts.push('lamp')}
+    m-=1+3.5*sun;
+    if(m<th.moist){m+=25;water+=10;acts.push('water')}
+    m=clamp(m,0,100);
+    let s;
+    s=m<30?(30-m)*0.4:0;why.dry+=s;let S=s;
+    s=m>85?(m-85)*0.5:0;why.wet+=s;S+=s;
+    s=t>30?(t-30)*1.2:0;why.hot+=s;S+=s;
+    s=t<15?(15-t)*0.8:0;why.cold+=s;S+=s;
+    s=(h>=7&&h<=19&&lux<300)?2.5:0;why.dark+=s;S+=s;
+    health=clamp(health-S,0,100);
+    rows.push({h,m,t,lux,acts});
+  }
+  return {rows,health:Math.round(health),water,why};
+}
+const WHY={dry:'Растения засыхали: полив включается слишком поздно. Подними порог влажности.',wet:'Почва переувлажнена, корни гниют. Опусти порог влажности.',hot:'Днём в теплице жара. Открывай форточки при более низкой температуре.',cold:'Форточки открываются слишком рано, растения мёрзнут. Подними порог температуры.',dark:'Утром и вечером растениям не хватает света. Подними порог для фитоламп.'};
+let bestG=0;
+function strip(rows,key,o){
+  const W=600,H=96,L=38,R=8,T=18,B=o.axis?20:6,iw=W-L-R,ih=H-T-B;
+  const x=h=>L+(h+0.5)*iw/24, y=v=>T+ih-(clamp(v,o.min,o.max)-o.min)/(o.max-o.min)*ih;
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.title}">`;
+  s+=`<rect x="${L}" y="${y(o.ok[1])}" width="${iw}" height="${y(o.ok[0])-y(o.ok[1])}" fill="var(--field)" opacity=".16"/>`;
+  [o.min,o.max].forEach(v=>{s+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`});
+  s+=`<text x="${L}" y="12" style="fill:var(--fg);font-weight:600">${o.title}</text>`;
+  if(o.th!=null)s+=`<line x1="${L}" x2="${W-R}" y1="${y(o.th)}" y2="${y(o.th)}" stroke="var(--amber)" stroke-width="2" stroke-dasharray="5 4"/>`;
+  rows.forEach(r=>{if(r.acts.includes(o.act))s+=`<rect x="${x(r.h)-iw/48+1}" y="${T}" width="${iw/24-2}" height="${ih}" fill="var(--water)" opacity=".14"/>`});
+  s+=`<polyline fill="none" stroke="var(--fg)" stroke-width="2.2" stroke-linejoin="round" points="${rows.map(r=>x(r.h)+','+y(r[key])).join(' ')}"/>`;
+  rows.forEach(r=>{if(r.acts.includes(o.act))s+=`<circle cx="${x(r.h)}" cy="${y(r[key])}" r="4" fill="var(--water)"/>`});
+  if(o.axis)[0,6,12,18,23].forEach(h=>{s+=`<text x="${x(h)}" y="${H-5}" text-anchor="middle">${h}:00</text>`});
+  return s+'</svg>';
+}
+function greenhouse(){
+  const th={moist:+$('thM').value,temp:+$('thT').value,light:+$('thL').value};
+  $('vM').textContent=th.moist+'%';$('vT').textContent=th.temp+' °C';$('vL').textContent=th.light+' лк';
+  $('code').innerHTML=`<span class="k">while</span> True:
+    <span class="k">if</span> soil_moisture &lt; <span class="n">${th.moist}</span>:   <span class="c"># влажность почвы, %</span>
+        pump.on()
+    <span class="k">if</span> air_temp &gt; <span class="n">${th.temp}</span>:        <span class="c"># температура, °C</span>
+        windows.open()
+    <span class="k">if</span> is_day() <span class="k">and</span> light &lt; <span class="n">${th.light}</span>:  <span class="c"># люксы</span>
+        lamps.on()
+    sleep(HOUR)`;
+  const r=simulate(th);
+  $('sY').textContent=r.health+'%';$('sW').textContent=r.water+' л';
+  if(r.health>bestG){bestG=r.health;const p=bestG>=90?30:bestG>=70?20:bestG>=40?10:0;if(p>pts.green){pts.green=p;updateScore()}}
+  $('sB').textContent=bestG+'%';
+  const worst=Object.entries(r.why).sort((a,b)=>b[1]-a[1])[0];
+  if(r.health>=90)msg('gmsg',`Отличная автоматика! Урожай ${r.health}%. Попробуй потратить меньше воды: сейчас ${r.water} л.`,'ok');
+  else msg('gmsg',WHY[worst[0]],r.health<50?'err':'');
+  $('charts').innerHTML=
+    strip(r.rows,'m',{title:'Влажность почвы, %',min:0,max:100,ok:[40,80],th:th.moist,act:'water'})+
+    strip(r.rows,'t',{title:'Температура воздуха, °C',min:5,max:45,ok:[18,28],th:th.temp,act:'vent'})+
+    strip(r.rows,'lux',{title:'Освещённость, люкс',min:0,max:1400,ok:[300,1400],th:th.light,act:'lamp',axis:true});
+}
+['thM','thT','thL'].forEach(id=>$(id).addEventListener('input',greenhouse));
+greenhouse();
+
+/* ===== Mission 3: drone NDVI ===== */
+const COLS=14,ROWS=9;let seed=7,cells=[],mode='rgb',checked=false;
+function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function genField(){
+  const R=rng(seed);const blobs=[];
+  for(let i=0;i<3;i++)blobs.push({x:1.5+R()*(COLS-3),y:1+R()*(ROWS-2),r:1.1+R()*0.9});
+  cells=[];
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    let v=0.7+R()*0.15;
+    blobs.forEach(b=>{const d2=(x-b.x)**2+(y-b.y)**2;v-=0.62*Math.exp(-d2/(b.r*b.r))});
+    v=clamp(v,0.08,0.88);
+    cells.push({v,sick:v<0.4,mark:false});
+  }
+  checked=false;
+}
+function mix(a,b,t){return a.map((c,i)=>Math.round(c+(b[i]-c)*t))}
+function ndviColor(v){
+  const lo=[200,65,43],mid=[232,195,58],hi=[46,138,69];
+  const t=clamp((v-0.1)/0.75,0,1);
+  const c=t<0.47?mix(lo,mid,t/0.47):mix(mid,hi,(t-0.47)/0.53);
+  return `rgb(${c})`;
+}
+function rgbColor(v,i){const n=((i*37)%7)/7;return `hsl(${92+n*10} ${30+v*8}% ${30+v*6+n*4}%)`}
+function renderNdvi(){
+  const g=$('ndvi');g.style.gridTemplateColumns=`repeat(${COLS},1fr)`;
+  if(g.children.length!==cells.length)g.innerHTML=cells.map((c,i)=>`<button class="nc" data-i="${i}" aria-label="Участок ${i%COLS+1}-${Math.floor(i/COLS)+1}"></button>`).join('');
+  cells.forEach((c,i)=>{
+    const b=g.children[i];
+    b.style.backgroundColor=mode==='ndvi'?ndviColor(c.v):rgbColor(c.v,i);
+    b.className='nc'+(c.mark?' mark':'')+(checked&&c.mark&&c.sick?' hit':'')+(checked&&!c.mark&&c.sick?' miss':'');
+    b.title=mode==='ndvi'?'NDVI '+c.v.toFixed(2):'';
+  });
+  $('markCount').textContent='Отмечено: '+cells.filter(c=>c.mark).length;
+  $('scaleBox').hidden=mode!=='ndvi';
+  $('camRgb').setAttribute('aria-pressed',mode==='rgb');$('camNdvi').setAttribute('aria-pressed',mode==='ndvi');
+}
+$('ndvi').addEventListener('click',e=>{const b=e.target.closest('.nc');if(!b)return;const c=cells[+b.dataset.i];c.mark=!c.mark;checked=false;renderNdvi()});
+$('camRgb').onclick=()=>{mode='rgb';renderNdvi()};
+$('camNdvi').onclick=()=>{mode='ndvi';renderNdvi();msg('dmsg','Красные и жёлтые участки — растения плохо работают листьями: болезнь, вредители или нехватка азота.')};
+$('dclear').onclick=()=>{cells.forEach(c=>c.mark=false);checked=false;renderNdvi()};
+$('dnew').onclick=()=>{seed=Math.floor(Math.random()*1e6);genField();mode='rgb';renderNdvi();msg('dmsg','Новое поле загружено. Начни с обычной камеры.')};
+$('spray').onclick=()=>{
+  const sick=cells.filter(c=>c.sick).length,hit=cells.filter(c=>c.sick&&c.mark).length,extra=cells.filter(c=>!c.sick&&c.mark).length,marked=hit+extra;
+  if(!marked){msg('dmsg','Сначала отметь участки для обработки.','err');return}
+  checked=true;renderNdvi();
+  const prec=hit/marked,rec=hit/sick,f1=prec+rec?2*prec*rec/(prec+rec):0;
+  const p=Math.round(f1*30);if(p>pts.drone){pts.drone=p;updateScore()}
+  const area=Math.round(marked/cells.length*100);
+  const txt=`Найдено больных участков: ${hit} из ${sick}. Лишних отметок: ${extra}. Обработано ${area}% поля вместо 100%, удобрений сэкономлено ${100-area}%. Баллы: ${p} из 30.`+(rec<1?' Пунктиром показаны пропущенные участки.':'');
+  msg('dmsg',txt,f1>=0.8?'ok':'err');
+};
+genField();renderNdvi();
+updateScore();
+})();
+</script>
+
+</body>
+</html>
